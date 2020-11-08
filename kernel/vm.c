@@ -376,13 +376,12 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
-  struct proc* p = myproc();
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0){
-      if(va0 >= p->sz || va0 < p->sb || lazyalloc(pagetable, va0) < 0)
+      if(lazyalloc(pagetable, va0) < 0)
         return -1;
       pa0 = walkaddr(pagetable, va0);
     }
@@ -405,13 +404,12 @@ int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
   uint64 n, va0, pa0;
-  struct proc* p = myproc();
 
   while(len > 0){
     va0 = PGROUNDDOWN(srcva);
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0){
-      if(va0 >= p->sz || va0 < p->sb || lazyalloc(pagetable, va0) < 0)
+      if(lazyalloc(pagetable, va0) < 0)
         return -1;
       pa0 = walkaddr(pagetable, va0);
     }
@@ -436,13 +434,12 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
   uint64 n, va0, pa0;
   int got_null = 0;
-  struct proc* p = myproc();
 
   while(got_null == 0 && max > 0){
     va0 = PGROUNDDOWN(srcva);
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0){
-      if(va0 >= p->sz || va0 < p->sb || lazyalloc(pagetable, va0) < 0)
+      if(lazyalloc(pagetable, va0) < 0)
         return -1;
       pa0 = walkaddr(pagetable, va0);
     }
@@ -481,6 +478,11 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 int
 lazyalloc(pagetable_t pagetable, uint64 va)
 {
+  struct proc* p = myproc();
+
+  if(va >= p->sz || va < p->sb)
+    return -1;
+
   char* mem = kalloc();
   if(mem == 0)
     return -1;

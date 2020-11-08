@@ -70,7 +70,7 @@ usertrap(void)
   } else if((r_scause() == 13) || (r_scause() == 15)){
     uint64 fault_addr = r_stval();
 
-    if(fault_addr >= p->sz || fault_addr < p->sb || lazyalloc(p->pagetable, PGROUNDDOWN(fault_addr)) < 0){
+    if(lazyalloc(p->pagetable, PGROUNDDOWN(fault_addr)) < 0){
       p->killed = 1;
     }
   } else {
