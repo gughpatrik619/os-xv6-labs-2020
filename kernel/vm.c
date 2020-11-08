@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -141,6 +143,25 @@ kvmpa(uint64 va)
   return pa+off;
 }
 
+/*
+ * finds pa that corresponds to va in pagetable
+ */
+uint64
+findpa(pagetable_t pagetable, uint64 va)
+{
+  uint64 off = va % PGSIZE;
+  pte_t *pte;
+  uint64 pa;
+
+  pte = walk(pagetable, va, 0);
+  if(pte == 0)
+    panic("kvmpa");
+  if((*pte & PTE_V) == 0)
+    panic("kvmpa");
+  pa = PTE2PA(*pte);
+  return pa+off;
+}
+
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned. Returns 0 on success, -1 if walk() couldn't
@@ -181,9 +202,9 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0)
-      panic("uvmunmap: walk");
+      continue;
     if((*pte & PTE_V) == 0)
-      panic("uvmunmap: not mapped");
+      continue;
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -315,9 +336,9 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
+      continue;
     if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+      continue;
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
@@ -355,12 +376,16 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
+  struct proc* p = myproc();
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
+    if(pa0 == 0){
+      if(va0 >= p->sz || va0 < p->sb || lazyalloc(pagetable, va0) < 0)
+        return -1;
+      pa0 = walkaddr(pagetable, va0);
+    }
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
@@ -380,12 +405,16 @@ int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
   uint64 n, va0, pa0;
+  struct proc* p = myproc();
 
   while(len > 0){
     va0 = PGROUNDDOWN(srcva);
     pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
+    if(pa0 == 0){
+      if(va0 >= p->sz || va0 < p->sb || lazyalloc(pagetable, va0) < 0)
+        return -1;
+      pa0 = walkaddr(pagetable, va0);
+    }
     n = PGSIZE - (srcva - va0);
     if(n > len)
       n = len;
@@ -407,12 +436,16 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
   uint64 n, va0, pa0;
   int got_null = 0;
+  struct proc* p = myproc();
 
   while(got_null == 0 && max > 0){
     va0 = PGROUNDDOWN(srcva);
     pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
+    if(pa0 == 0){
+      if(va0 >= p->sz || va0 < p->sb || lazyalloc(pagetable, va0) < 0)
+        return -1;
+      pa0 = walkaddr(pagetable, va0);
+    }
     n = PGSIZE - (srcva - va0);
     if(n > max)
       n = max;
@@ -439,4 +472,24 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+/*
+ * Lazily allocate a page for process.
+ * Return 0 on success, -1 on error;
+ */
+int
+lazyalloc(pagetable_t pagetable, uint64 va)
+{
+  char* mem = kalloc();
+  if(mem == 0)
+    return -1;
+
+  memset(mem, 0, PGSIZE);
+  if(mappages(pagetable, va, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+    kfree(mem);
+    return -1;
+  }
+
+  return 0;
 }

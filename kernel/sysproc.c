@@ -41,8 +41,7 @@ sys_wait(void)
 uint64
 sys_sbrk(void)
 {
-  int addr;
-  int n;
+  int addr, n;
 
   if(argint(0, &n) < 0)
     return -1;
