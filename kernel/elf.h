@@ -40,3 +40,32 @@ struct proghdr {
 #define ELF_PROG_FLAG_EXEC      1
 #define ELF_PROG_FLAG_WRITE     2
 #define ELF_PROG_FLAG_READ      4
+
+//TODO: finish machines
+static const char* elfmachine[] = {
+    [0x01]  "AT&T WE 32100",
+    [0x02]  "SPARC",
+    [0x03]  "x86",
+    [0x04]  "",
+    [0x05]  "AT&T WE 32100",
+    [0x06]  "AT&T WE 32100",
+    [0x07]  "AT&T WE 32100",
+    [0x08]  "AT&T WE 32100",
+    [0x09]  "AT&T WE 32100",
+    [0x0A]  "AT&T WE 32100",
+    [0x0E]  "AT&T WE 32100",
+    [0x0F]  "AT&T WE 32100",
+    [0x13]  "AT&T WE 32100",
+    [0x14]  "AT&T WE 32100",
+    [0x15]  "AT&T WE 32100",
+    [0x16]  "AT&T WE 32100",
+    [0x28]  "AT&T WE 32100",
+    [0x2A]  "AT&T WE 32100",
+    [0x32]  "AT&T WE 32100",
+    [0x3E]  "AT&T WE 32100",
+    [0x8C]  "AT&T WE 32100",
+    [0xB7]  "AT&T WE 32100",
+    [0xF3]  "AT&T WE 32100",
+    [0x101]  "AT&T WE 32100",
+
+};

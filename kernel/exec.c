@@ -35,6 +35,8 @@ exec(char *path, char **argv)
   if(elf.magic != ELF_MAGIC)
     goto bad;
 
+  printf("elf machine: %s\n", elf.machine == ELF_MACH_RISC_V ? "RISC-V" : "Other");
+
   if((pagetable = proc_pagetable(p)) == 0)
     goto bad;
 
