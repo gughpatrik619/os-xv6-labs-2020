@@ -25,6 +25,11 @@ static struct {
 
 static char digits[] = "0123456789abcdef";
 
+int
+log2(unsigned n){
+  return (n > 1) ? (1 + log2(n / 2)) : 0;
+}
+
 static void
 printint(int xx, int base, int sign)
 {
@@ -50,6 +55,43 @@ printint(int xx, int base, int sign)
 }
 
 static void
+printchar(char c)
+{
+  consputc(c);
+}
+
+static void
+printlong(long xx, int base, int sign)
+{
+  char buf[16];
+  int i;
+  uint64 x;
+
+  if(sign && (sign = xx < 0))
+    x = -xx;
+  else
+    x = xx;
+
+  i = 0;
+  do {
+    buf[i++] = digits[x % base];
+  } while((x /= base) != 0);
+
+  if(sign)
+    buf[i++] = '-';
+
+  while(--i >= 0)
+    consputc(buf[i]);
+}
+
+static void
+printbin(uint64 n)
+{
+  for (uint64 i = 1L << log2(n); i > 0; i = i / 2)
+    (n & i) ? consputc('1') : consputc('0');
+}
+
+static void
 printptr(uint64 x)
 {
   int i;
@@ -59,7 +101,7 @@ printptr(uint64 x)
     consputc(digits[x >> (sizeof(uint64) * 8 - 4)]);
 }
 
-// Print to the console. only understands %d, %x, %p, %s.
+// Print to the console. only understands %d, %l, %b (binary), %o (octal), %x (hexa), %x, %p, %s.
 void
 printf(char *fmt, ...)
 {
@@ -87,8 +129,20 @@ printf(char *fmt, ...)
     case 'd':
       printint(va_arg(ap, int), 10, 1);
       break;
+    case 'l':
+      printlong(va_arg(ap, long), 10, 1);
+      break;
+    case 'b':
+      printbin(va_arg(ap, uint64));
+      break;
     case 'x':
       printint(va_arg(ap, int), 16, 1);
+      break;
+    case 'o':
+      printint(va_arg(ap, int), 8, 1);
+      break;
+    case 'c':
+      printchar((char) va_arg(ap, int));
       break;
     case 'p':
       printptr(va_arg(ap, uint64));

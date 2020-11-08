@@ -121,6 +121,18 @@ found:
     return 0;
   }
 
+  // A kernel page table.
+  p->kernel_pagetable = k_create_pgtbl();
+  if(p->kernel_pagetable == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  // map kernel stack
+  uint64 va = KSTACK((int) (p - proc));
+  k_map_pgtbl(p->kernel_pagetable, va, kvmpa(va), PGSIZE, PTE_R | PTE_W);
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -141,7 +153,14 @@ freeproc(struct proc *p)
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+  if(p->kernel_pagetable) {
+    uvmunmap(p->kernel_pagetable, 0L, PGROUNDUP(p->sz)/PGSIZE, 0);
+    // "brute force" solution :)
+    // uvmunmap(p->kernel_pagetable, 0L, 49152, 0);
+    k_free_pgtbl(p->kernel_pagetable, p->kstack);
+  }
   p->pagetable = 0;
+  p->kernel_pagetable = 0;
   p->sz = 0;
   p->pid = 0;
   p->parent = 0;
@@ -168,15 +187,13 @@ proc_pagetable(struct proc *p)
   // at the highest user virtual address.
   // only the supervisor uses it, on the way
   // to/from user space, so not PTE_U.
-  if(mappages(pagetable, TRAMPOLINE, PGSIZE,
-              (uint64)trampoline, PTE_R | PTE_X) < 0){
+  if(mappages(pagetable, TRAMPOLINE, PGSIZE, (uint64)trampoline, PTE_R | PTE_X) < 0){
     uvmfree(pagetable, 0);
     return 0;
   }
 
   // map the trapframe just below TRAMPOLINE, for trampoline.S.
-  if(mappages(pagetable, TRAPFRAME, PGSIZE,
-              (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
+  if(mappages(pagetable, TRAPFRAME, PGSIZE, (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
     uvmunmap(pagetable, TRAMPOLINE, 1, 0);
     uvmfree(pagetable, 0);
     return 0;
@@ -228,6 +245,8 @@ userinit(void)
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
 
+  k_map_usr_pgtbl(p->kernel_pagetable, p->pagetable);
+
   p->state = RUNNABLE;
 
   release(&p->lock);
@@ -249,6 +268,9 @@ growproc(int n)
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
+
+  k_map_usr_pgtbl(p->kernel_pagetable, p->pagetable);
+
   p->sz = sz;
   return 0;
 }
@@ -279,6 +301,9 @@ fork(void)
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
+
+  // map page table of new process into its kernel page table
+  k_map_usr_pgtbl(np->kernel_pagetable, np->pagetable);
 
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;
@@ -473,7 +498,14 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+
+        // load process's kernel page table into satp register
+        load_satp_pgtbl(p->kernel_pagetable);
+
         swtch(&c->context, &p->context);
+
+        // switch back kernel page table
+        kvminithart();
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.

@@ -12,6 +12,12 @@ struct superblock;
 struct mbuf;
 struct sock;
 #endif
+struct pteinfo {
+    uint8 lvl;  // level (L2, L1 or L0) on which pte was found
+    uint16 idx; // index in the page table at which pte was found
+    uint64 pa;  // the pa at which pte in mapped
+    pte_t pte;  // the pte in question
+};
 
 // bio.c
 void            binit(void);
@@ -178,6 +184,19 @@ uint64          walkaddr(pagetable_t, uint64);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
+void            print_pagetable(pagetable_t, _Bool);
+void            vmprint(pagetable_t);
+_Bool           find_pa(pagetable_t, uint64, struct pteinfo*);
+void            load_satp_pgtbl(pagetable_t);
+int             k_map_pgtbl(pagetable_t, uint64, uint64, uint64, int);
+pagetable_t     k_create_pgtbl(void);
+void            k_free_pgtbl(pagetable_t, uint64);
+int             k_map_usr_pgtbl(pagetable_t, pagetable_t);
+void            print_flags(pte_t);
+
+// vmcopyin
+int             copyin_new(pagetable_t, char*, uint64, uint64);
+int             copyinstr_new(pagetable_t, char*, uint64, uint64);
 
 // plic.c
 void            plicinit(void);
@@ -193,6 +212,10 @@ void            virtio_disk_intr(void);
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 
+#define true 1
+#define false 0
+
+#define CHECK_FLAG(pte, flag) ((pte) & (flag))
 
 
 // stats.c
