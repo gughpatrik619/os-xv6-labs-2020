@@ -311,7 +311,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+//  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -319,12 +319,12 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+    if(HAS_BIT(*pte, PTE_W)){
+      KILL_BIT(*pte, PTE_W);
+      SET_BIT(*pte, PTE_COW);
+    }
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
       goto err;
     }
   }
@@ -439,4 +439,41 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+/*
+ * Return 0 on success, -1 on error
+ */
+int
+_uvmcow(pte_t* pte)
+{
+  uint64 pa;
+  char* mem;
+
+  if((mem = kalloc()) == 0)
+    return -1;
+  pa = PTE2PA(*pte);
+  memmove(mem, (char*)pa, PGSIZE);
+  KILL_BIT(*pte, PTE_COW);
+  SET_BIT(*pte, PTE_W);
+  *pte = PA2PTE(mem) | PTE_FLAGS(*pte);
+  return 0;
+
+  //todo(count references)
+}
+
+/*
+ * Return 0 on success, -1 on error
+ */
+int
+uvmcow(pagetable_t pagetable, uint64 fault_addr)
+{
+  pte_t* pte;
+
+  if((pte = walk(pagetable, PGROUNDDOWN(fault_addr), 0)) == 0)
+    return -1;
+  if(!HAS_BIT(*pte, PTE_V) || !HAS_BIT(*pte, PTE_COW))
+    return -1;
+
+  return _uvmcow(pte);
 }
