@@ -10,6 +10,8 @@
 #define STACK_SIZE  8192
 #define MAX_THREAD  4
 
+#define PGSIZE 4096
+
 struct context {
     uint64 ra;
     uint64 sp;
@@ -99,7 +101,7 @@ thread_create(void (*func)())
   // YOUR CODE HERE
   memset(&t->context, 0, sizeof(t->context));
   t->context.ra = (uint64)func;
-  t->context.sp = (uint64)t->stack;
+  t->context.sp = (uint64)(t->stack + STACK_SIZE);
 }
 
 void 
