@@ -402,14 +402,23 @@ bmap(struct inode *ip, uint bn)
   }
   bn -= NINDIRECT;
 
-  if(bn < NDINDIRECT){
-    // Load double-indirect block, allocating if necessary.
+  if(bn < NTINDIRECT){
+    // Load triple-indirect block, allocating if necessary.
     if((addr = ip->addrs[NDIRECT+1]) == 0)
       ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
     bp = bread(ip->dev, addr);
     a = (uint*)bp->data;
-    if((addr = a[bn/NINDIRECT]) == 0){
-      a[bn/NINDIRECT] = addr = balloc(ip->dev);
+    if((addr = a[bn/(NINDIRECT*NINDIRECT)]) == 0){
+      a[bn/(NINDIRECT*NINDIRECT)] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+
+    // Load double-indirect block, allocating if necessary.
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[(bn % (NINDIRECT * NINDIRECT)) / 256]) == 0){
+      a[(bn % (NINDIRECT * NINDIRECT)) / 256] = addr = balloc(ip->dev);
       log_write(bp);
     }
     brelse(bp);
@@ -417,8 +426,8 @@ bmap(struct inode *ip, uint bn)
     // Load indirect block, allocating if necessary.
     bp = bread(ip->dev, addr);
     a = (uint*)bp->data;
-    if((addr = a[bn % NINDIRECT]) == 0){
-      a[bn % NINDIRECT] = addr = balloc(ip->dev);
+    if((addr = a[(bn % (NINDIRECT * NINDIRECT)) % 256]) == 0){
+      a[(bn % (NINDIRECT * NINDIRECT)) % 256] = addr = balloc(ip->dev);
       log_write(bp);
     }
     brelse(bp);
@@ -433,9 +442,9 @@ bmap(struct inode *ip, uint bn)
 void
 itrunc(struct inode *ip)
 {
-  int i, j;
-  struct buf *bp, *bp2;
-  uint *a, *a2;
+  int i, j, k;
+  struct buf *bp, *bp2, *bp3;
+  uint *a, *a2, *a3;
 
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
@@ -457,7 +466,7 @@ itrunc(struct inode *ip)
     ip->addrs[NDIRECT] = 0;
   }
 
-  // Table of double-indirect blocks
+  // Table of triple-indirect blocks
   if(ip->addrs[NDIRECT+1]){
     bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
     a = (uint*)bp->data;
@@ -466,8 +475,16 @@ itrunc(struct inode *ip)
         bp2 = bread(ip->dev, a[j]);
         a2 = (uint*)bp2->data;
         for(i = 0; i < NINDIRECT; i++){
-          if(a2[i])
+          if(a2[i]){
+            bp3 = bread(ip->dev, a2[i]);
+            a3 = (uint*)bp3->data;
+            for(k = 0; k < NINDIRECT; ++k) {
+              if(a3[k])
+                bfree(ip->dev, a3[k]);
+            }
+            brelse(bp3);
             bfree(ip->dev, a2[i]);
+          }
         }
         brelse(bp2);
         bfree(ip->dev, a[j]);
