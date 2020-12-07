@@ -23,12 +23,12 @@ main()
     if(cc <= 0)
       break;
     blocks++;
-    if (blocks % 100 == 0)
+    if (blocks % 1000 == 0)
       printf(".");
   }
 
   printf("\nwrote %d blocks\n", blocks);
-  if(blocks != 65803) {
+  if(blocks != 16777483) {
     printf("bigfile: file is too small\n");
     exit(-1);
   }
